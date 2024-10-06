@@ -1,0 +1,41 @@
+WITH activate_instructions as (
+    SELECT ic.tx_id
+         , ic.block_time
+         , ic.block_date
+         , ic.block_slot
+    FROM solana.instruction_calls AS ic 
+    WHERE ic.executing_account = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'  
+    --   AND ic.data = 0x7b22726566223a22635055746d796237525a684361547573436234716e504a6a56546277704a365370585543766e4244553461227d
+      AND ic.data = 0x7b226163746976617465223a747275657d
+      AND ic.block_time >= TIMESTAMP '2024-09-01 00:00'
+) 
+, activators AS (SELECT
+  t.signer AS user,
+  a.balance_change/1e9 AS amount
+FROM
+  solana.account_activity a
+  JOIN activate_instructions ai on ai.tx_id = a.tx_id and ai.block_time = a.block_time
+  JOIN solana.transactions t ON t.signature = a.tx_id
+WHERE
+  a.address = '4bTrXA7iNcqcXobcRkVMCF1f47dXn2vuRtDZYQQYRN2M'
+    AND a.block_slot > 283986752
+    AND t.block_slot > 283986752
+    AND DATE_TRUNC('day', a.block_time) >= CAST('2024-09-08 00:00' AS TIMESTAMP)
+    AND DATE_TRUNC('day', t.block_time) >= CAST('2024-09-08 00:00' AS TIMESTAMP)
+    AND a.tx_success = TRUE
+    AND balance_change > 0
+ORDER BY
+a.block_time DESC
+),
+sol_price AS (SELECT
+price AS solprice
+FROM prices.usd_latest
+WHERE blockchain = 'solana'
+AND symbol = 'SOL'
+)
+
+SELECT
+COUNT(DISTINCT user),
+SUM(amount) * MAX(solprice) AS activated
+FROM activators
+CROSS JOIN sol_price
